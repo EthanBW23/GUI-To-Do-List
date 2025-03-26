@@ -3,16 +3,19 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
+import java.util.ArrayList;
 
 class Task {
     private String name;
     private String dueDate;
     private boolean completed;
+    private String priority;
 
-    public Task(String name, String dueDate) {
+    public Task(String name, String dueDate, String priority) {
         this.name = name;
         this.dueDate = dueDate;
         this.completed = false;
+        this.priority = priority;
     }
 
     public String getName() {
@@ -30,23 +33,29 @@ class Task {
     public void markCompleted() {
         this.completed = true;
     }
-
+    
+    public String getPriority() {
+        return priority;
+    }
+    
     @Override
     public String toString() {
-        return (completed ? "[✔] " : "[ ] ") + name + " (Due: " + dueDate + ")";
+    	return (completed ? "[✔] " : "[ ] ") + name + " (Due: " + dueDate + ", Priority: " + priority + ")";
     }
 }
 
 class ToDoList {
     private DefaultListModel<Task> taskListModel;
     private JList<Task> taskList;
-    private JTextField taskField, dateField;
+    private JTextField taskField;
+    private JComboBox<Integer> yearBox, dayBox;
+    private JComboBox<String> monthBox, priorityBox;
     private static final String FILE_NAME = "tasks.txt";
 
     public ToDoList() {
         JFrame frame = new JFrame("To-Do List");
         frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        frame.setSize(550, 400);
+        frame.setSize(650, 400);
         
         JPanel panel = new JPanel();
         panel.setLayout(new BorderLayout());
@@ -54,13 +63,34 @@ class ToDoList {
         // Input Fields
         JPanel inputPanel = new JPanel();
         taskField = new JTextField(15);
-        dateField = new JTextField(10);
+        
+        yearBox = new JComboBox<>();
+        for (int i = 2025; i <= 2030; i++) {
+            yearBox.addItem(i);
+        }
+
+        // Month Dropdown
+        String[] months = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+        monthBox = new JComboBox<>(months);
+
+        // Day Dropdown
+        dayBox = new JComboBox<>();
+        updateDays(); // Set days dynamically based on the selected month/year
+
+        // Priority Dropdown
+        String[] priorities = {"Low", "Medium", "High"};
+        priorityBox = new JComboBox<>(priorities);
+        
         JButton addButton = new JButton("Add Task");
         
         inputPanel.add(new JLabel("Task:"));
         inputPanel.add(taskField);
         inputPanel.add(new JLabel("Due Date:"));
-        inputPanel.add(dateField);
+        inputPanel.add(dayBox);
+        inputPanel.add(monthBox);
+        inputPanel.add(yearBox);
+        inputPanel.add(new JLabel("Priority:"));
+        inputPanel.add(priorityBox);
         inputPanel.add(addButton);
         
         // Task List
@@ -94,6 +124,8 @@ class ToDoList {
         completeButton.addActionListener(event -> markTaskCompleted());
         saveButton.addActionListener(event -> saveTasks());
         loadButton.addActionListener(event -> loadTasks());
+        monthBox.addActionListener(event -> updateDays()); // Update days when the month changes
+        yearBox.addActionListener(event -> updateDays());  // Update days when the year changes
         
         createFile();
         loadTasks();
@@ -110,17 +142,54 @@ class ToDoList {
             }
         });
     }
+    
+    private void updateDays() {
+        int selectedYear = (Integer) yearBox.getSelectedItem();
+        String selectedMonth = (String) monthBox.getSelectedItem();
+
+        int daysInMonth;
+        switch (selectedMonth) {
+            case "January": case "March": case "May": case "July": case "August": case "October": case "December":
+                daysInMonth = 31;
+                break;
+            case "April": case "June": case "September": case "November":
+                daysInMonth = 30;
+                break;
+            case "February":
+                // Check for leap year
+                if ((selectedYear % 4 == 0 && selectedYear % 100 != 0) || (selectedYear % 400 == 0)) {
+                    daysInMonth = 29; // Leap year
+                } else {
+                    daysInMonth = 28;
+                }
+                break;
+            default:
+                System.err.println("Unexpected month: " + selectedMonth);
+                return; // Exit early if month is incorrect
+        }
+        
+        // Debugging output
+        System.out.println("Year: " + selectedYear + ", Month: " + selectedMonth + ", Days: " + daysInMonth);
+
+        // Update the day dropdown
+        dayBox.removeAllItems();
+        for (int i = 1; i <= daysInMonth; i++) {
+            dayBox.addItem(i);
+        }
+    }
 
     private void addTask() {
         String name = taskField.getText().trim();
-        String dueDate = dateField.getText().trim();
-        if (name.isEmpty() || dueDate.isEmpty()) {
+        String dueDate = dayBox.getSelectedItem() + " " + monthBox.getSelectedItem() + " " + yearBox.getSelectedItem();
+        String priority = (String) priorityBox.getSelectedItem();
+
+        if (name.isEmpty()) {
             JOptionPane.showMessageDialog(null, "Task name and due date cannot be empty!", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        taskListModel.addElement(new Task(name, dueDate));
+        
+        taskListModel.addElement(new Task(name, dueDate, priority));
         taskField.setText("");
-        dateField.setText("");
         JOptionPane.showMessageDialog(null, "Tasks added successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
     }
 
@@ -153,7 +222,7 @@ class ToDoList {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_NAME))) {
             for (int i = 0; i < taskListModel.size(); i++) {
                 Task task = taskListModel.getElementAt(i);
-                writer.write(task.getName() + "," + task.getDueDate() + "," + task.isCompleted());
+                writer.write(task.getName() + "," + task.getDueDate() + "," + task.isCompleted() + "," + task.getPriority());
                 writer.newLine();
             }
             if (!isClosing) { // Show dialog only when NOT closing
@@ -170,8 +239,8 @@ class ToDoList {
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(",");
-                if (parts.length == 3) {
-                    Task task = new Task(parts[0], parts[1]);
+                if (parts.length == 4) {
+                    Task task = new Task(parts[0], parts[1], parts[3]);
                     if (Boolean.parseBoolean(parts[2])) {
                         task.markCompleted();
                     }
@@ -200,6 +269,5 @@ class ToDoList {
     }
 }
 
-// better input checking, date (possibly take in 3 inputs, year, month, day)
-// add task priority and ordering
+// See if date ordering is easy
 // ask for better explanations of the code
